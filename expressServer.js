@@ -4,6 +4,7 @@ const path = require("path");
 const request = require("request");
 var mysql = require("mysql");
 const jwt = require('jsonwebtoken');
+const auth = require("./lib/auth");
 
 var connection = mysql.createConnection({
   host: "localhost",
@@ -35,8 +36,17 @@ app.get("/login", function (req, res) {
   res.render("login");
 });
 
-app.get('/authTest', function (req, res){
+app.get('/authTest', auth, function (req, res){
+  console.log(req.decoded);
   res.json('로그인이 완료된 사용자가 보는 화면')
+});
+
+app.get("/balance", function (req, res) {
+  res.render("balance");
+});
+
+app.get("/qrcode", function (req, res) {
+  res.render("qrcode");
 });
 
 app.get("/authResult", function (req, res) {
@@ -140,32 +150,121 @@ app.post("/login", function (req, res) {
   });
 });
 
-app.post('/list', function (req, res){
+app.post('/list', auth, function (req, res){
+  var userId = req.decoded.userId;
   //request 계좌 목록 조회 요청 만들기 request 모듈 활용
   //res.json(api 결과 body 객체)
-
-  
-  var option = {
-    method: "GET",
-    url: "https://testapi.openbanking.or.kr/v2.0/user/me",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      'Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiIxMTAwNzYwNTI2Iiwic2NvcGUiOlsiaW5xdWlyeSIsImxvZ2luIiwidHJhbnNmZXIiXSwiaXNzIjoiaHR0cHM6Ly93d3cub3BlbmJhbmtpbmcub3Iua3IiLCJleHAiOjE2MDIzOTM1ODAsImp0aSI6IjlhY2NjOWQ2LWU4NTktNDY2Ny05NDI3LTJkZGI1YWM4YzVjNSJ9.9JG7xn'
-    },
-    //form 형태는 form / 쿼리스트링 형태는 qs / json 형태는 json ***
-    form: {
-      user_seq_no: 1100760526
-    },
-  };
-  request(option, function (error, response, body) {
-    if (error) {
+  var sql = 'SELECT * FROM user WHERE id = ?';
+  connection.query(sql, [userId], function (error, results) {
+    if(error){
       console.error(error);
       throw error;
-    } else {
-      var accessRequestResult = JSON.parse(body);
-      console.log(accessRequestResult);
-      res.render("main", { data: accessRequestResult });
+    }else{
+      console.log(results[0]);
+      var option = {
+        method: "GET",
+        url: "https://testapi.openbanking.or.kr/v2.0/user/me",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization:'Bearer '+ results[0].accesstoken,
+        },
+        //eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiIxMTAwNzYwNTI2Iiwic2NvcGUiOlsiaW5xdWlyeSIsImxvZ2luIiwidHJhbnNmZXIiXSwiaXNzIjoiaHR0cHM6Ly93d3cub3BlbmJhbmtpbmcub3Iua3IiLCJleHAiOjE2MDIzOTM1ODAsImp0aSI6IjlhY2NjOWQ2LWU4NTktNDY2Ny05NDI3LTJkZGI1YWM4YzVjNSJ9.9JG7xn9Yp1MfKkfWMJZLRX71Ycmb1N8IcU1z2vyB_Sw
+        //form 형태는 form / 쿼리스트링 형태는 qs / json 형태는 json ***
+        qs: {
+          user_seq_no: results[0].userseqno,
+        },
+      };
+      request(option, function (error, response, body) {
+        if (error) {
+          console.error(error);
+          throw error;
+        } else {
+          var resultJson = JSON.parse(body);
+          res.json(resultJson);
+        }
+      });
     }
   });
-})
+ 
+});
+
+app.post("/balance", auth, function (req, res) {
+  var userId = req.decoded.userId;
+  var fin_use_num = req.body.fin_use_num;
+  console.log("받아온 데이터", userId, fin_use_num);
+  var sql = "SELECT * FROM user WHERE id = ?";
+
+  var countnum = Math.floor(Math.random() * 1000000000) + 1;
+  var transId = "T991629410U" + countnum; //이용기과번호 본인것 입력
+
+  connection.query(sql, [userId], function (err, result) {
+    if (err) {
+      console.error(err);
+      throw err;
+    } else {
+      var option = {
+        method: "GET",
+        url: "https://testapi.openbanking.or.kr/v2.0/account/balance/fin_num",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: "Bearer " + result[0].accesstoken,
+        },
+        //form 형태는 form / 쿼리스트링 형태는 qs / json 형태는 json ***
+        qs: {
+          bank_tran_id: transId,
+          fintech_use_num: fin_use_num,
+          tran_dtime: "20200715151000",
+        },
+      };
+      request(option, function (err, response, body) {
+        console.log(body);
+        var balanceResult = JSON.parse(body);
+        res.json(balanceResult);
+      });
+    }
+  });
+});
+
+app.post("/transactionList", auth, function (req, res) {
+  var userId = req.decoded.userId;
+  var fin_use_num = req.body.fin_use_num;
+
+  var sql = "SELECT * FROM user WHERE id = ?";
+
+  var countnum = Math.floor(Math.random() * 1000000000) + 1;
+  var transId = "T991629410U" + countnum; //이용기과번호 본인것 입력
+
+  connection.query(sql, [userId], function (err, result) {
+    if (err) {
+      console.error(err);
+      throw err;
+    } else {
+      var option = {
+        method: "GET",
+        url:
+          "https://testapi.openbanking.or.kr/v2.0/account/transaction_list/fin_num",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: "Bearer " + result[0].accesstoken,
+        },
+        //form 형태는 form / 쿼리스트링 형태는 qs / json 형태는 json ***
+        qs: {
+          bank_tran_id: transId,
+          fintech_use_num: fin_use_num,
+          inquiry_type: "A",
+          inquiry_base: "D",
+          from_date: "20190101",
+          to_date: "20190101",
+          sort_order: "D",
+          tran_dtime: "20200715114100",
+        },
+      };
+      request(option, function (err, response, body) {
+        console.log(body);
+        var transactionResult = JSON.parse(body);
+        res.json(transactionResult);
+      });
+    }
+  });
+});
 app.listen(3000);
