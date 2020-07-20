@@ -49,6 +49,11 @@ app.get("/qrcode", function (req, res) {
   res.render("qrcode");
 });
 
+app.get("/qrreader", function (req, res) {
+  res.render("qrreader");
+});
+
+
 app.get("/authResult", function (req, res) {
   var authCode = req.query.code;
   console.log("사용자 인증코드 : ", authCode);
@@ -267,4 +272,55 @@ app.post("/transactionList", auth, function (req, res) {
     }
   });
 });
+app.post("/withdraw", auth, function (req, res){
+  // 출금 이체 코드 작성
+  // 출금이 발생할 핀테크 번호는 고정값 사용
+  var userId = req.decoded.userId;
+  var fin_use_num = req.body.fin_use_num;
+  console.log("받아온 데이터", userId, fin_use_num);
+
+  var sql = "SELECT * FROM user WHERE id = ?";
+
+  var countnum = Math.floor(Math.random() * 1000000000) + 1;
+  var transId = "T991629410U" + countnum; //이용기과번호 본인것 입력
+
+  connection.query(sql, [userId], function (err, result) {
+    if (err) {
+      console.error(err);
+      throw err;
+    } else {
+      var option = {
+        method: "POST",
+        url:
+          "https://testapi.openbanking.or.kr/v2.0/transfer/withdraw/fin_num",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + result[0].accesstoken,
+        },
+        //form 형태는 form / 쿼리스트링 형태는 qs / json 형태는 json ***
+        json: {
+          bank_tran_id : transId,
+          cntr_account_type :"N",
+          cntr_account_num :"6739934138",
+          dps_print_content :"환불",
+          fintech_use_num: "199162941057883904672289",
+          tran_amt: "1000",
+          tran_dtime : "20200720112020",
+          req_client_name :"홍길동",
+          req_client_num: "LEEHWICHAN",
+          req_client_fintech_use_num :"199162941057883904672289",
+          transfer_purpose : "TR",
+          recv_client_name : "이휘찬",
+          recv_client_bank_code: "088",
+          recv_client_account_num : "6739934138"
+        },
+      };
+      request(option, function (err, response, body) {
+        console.log(body);
+        res.json(body);
+      });
+    }
+  });
+});
+
 app.listen(3000);
